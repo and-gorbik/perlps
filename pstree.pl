@@ -1,6 +1,5 @@
 use 5.016;
 use warnings;
-use DDP;
 
 sub get_ppid {
 	my $path = shift;
@@ -22,20 +21,22 @@ for (@lst) {
 }
 closedir $dir or die "Can't close /proc\n";
 
-# p %map;
-
 sub traverse;
 sub traverse {
 	my $ppid = shift;
+	my $depth = shift;
+	print "\t" for 1..$depth;
 	print "$ppid\n";
 	if (defined $map{"$ppid"}) {
-		print "\t";
 		for (@{$map{"$ppid"}}) {
-			print "\t";
-			traverse($_);
+			traverse($_, $depth + 1);
 		}
 	}
 }
 
-traverse(1);
+# my %args;
+# while (shift @ARGV) {
+# 	$args{$arg} if 
+# }
+traverse(0, 0);
 
