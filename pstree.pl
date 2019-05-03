@@ -1,14 +1,6 @@
 use 5.016;
-BEGIN{
-	if ($] < 5.018) {
-		package experimental;
-		use warnings::register;
-	}
-}
-no warnings 'experimental';
-
-# формат вывода
-my $fmt = "p";
+use Getopt::Long qw(GetOptions);
+Getopt::Long::Configure qw(gnu_getopt);
 
 sub get_ppid {
 	my $path = shift;
@@ -41,6 +33,16 @@ sub print_stat {
 	print "\n";
 }
 
+sub traverse;
+sub traverse {
+	my ($pid, $depth, $map, $fmt) = @_;
+	print "\t" for 1..$depth;
+	print_stat $pid, $fmt;
+	for (@{$map->{"$pid"}}) {
+		traverse($_, $depth + 1, $map, $fmt);
+	}
+}
+
 opendir my($dir), "/proc" or die "Can't open /proc\n";
 my @lst = readdir $dir or die "Can't read from /proc\n";
 my %map;
@@ -50,17 +52,20 @@ for (@lst) {
 }
 closedir $dir or die "Can't close /proc\n";
 
-sub traverse;
-sub traverse {
-	my $pid = shift;
-	my $depth = shift;
-	print "\t" for 1..$depth;
-	print_stat $pid, $fmt;
-	for (@{$map{"$pid"}}) {
-		traverse($_, $depth + 1);
-	}
+my $pid;
+my $fmt;
+my $all;
+GetOptions(
+	'all|a' => \$all,
+	'pid|p=s' => \$pid,
+	'format|f=s' => \$fmt,
+) or die "Usage: $0 --pid PID --format nug\nor\n$0 --all\n";
+
+$fmt .= "p";
+if ($all) {
+	traverse(1, 0, \%map, $fmt);
+} elsif ($pid) {
+	traverse($pid, 0, \%map, $fmt);
+} else {
+	die "Usage: $0 --pid PID --format nug\nor\n$0 --all\n";
 }
-
-$fmt .= "nug";
-traverse(1, 0);
-
