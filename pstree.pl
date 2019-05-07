@@ -2,53 +2,52 @@ use 5.016;
 use Getopt::Long qw(GetOptions);
 Getopt::Long::Configure qw(gnu_getopt);
 
-sub get_ppid {
-	my $path = shift;
-	open my($fd), $path or die "Can't read $path\n";
-	my @lines = <$fd>;
-	close $fd or die "Can't close $path\n";
-	@lines = grep(/PPid:/, @lines);
-	@lines = split("\t", $lines[0]);
-	return $lines[1];
-}
-
-sub print_stat {
+sub get_stat {
 	my $pid = shift;
-	my $fmt = shift;
-
-	open my($fd), "/proc/$pid/status" or die "Can't read /proc/$pid/status\n";
+	open my ($fd), "/proc/$pid/status" or die "Can't read /proc/$pid/status\n";
 	my @lines = <$fd>;
 	close $fd or die "Can't close /proc/$pid/status\n";
-	my %stat;
-	for (qw(0 7 8)) {
+	my ($ppid, %stat);
+	$lines[5] =~ /PPid:\t(\d+)/;
+	$ppid = $1;
+	for (qw(0 4 7 8)) {
 		my @lst = split "\t", $lines[$_];
 		$stat{$lst[0]} = $lst[1];
 		chomp $stat{$lst[0]};
 	}
+	return $ppid, \%stat;
+}
 
-	print "[$pid]" if $fmt =~ /p/;
-    print " $stat{'Name:'}" if $fmt =~ /n/;
-    print " uid=$stat{'Uid:'}" if $fmt =~ /u/;
-	print " gid=$stat{'Gid:'}" if $fmt =~ /g/;
+sub print_stat {
+	my $stat = shift;
+	my $fmt = shift;
+
+	print "[$stat->{'Pid:'}]" if $fmt =~ /p/;
+    print " $stat->{'Name:'}" if $fmt =~ /n/;
+    print " uid=$stat->{'Uid:'}" if $fmt =~ /u/;
+	print " gid=$stat->{'Gid:'}" if $fmt =~ /g/;
 	print "\n";
 }
 
 sub traverse;
 sub traverse {
-	my ($pid, $depth, $map, $fmt) = @_;
+	my ($pid, $depth, $relations, $stats, $fmt) = @_;
 	print "\t" for 1..$depth;
-	print_stat $pid, $fmt;
-	for (@{$map->{"$pid"}}) {
-		traverse($_, $depth + 1, $map, $fmt);
+	print_stat $stats->{$pid}, $fmt;
+	for (@{$relations->{$pid}}) {
+		traverse($_, $depth + 1, $relations, $stats, $fmt);
 	}
 }
 
 opendir my($dir), "/proc" or die "Can't open /proc\n";
 my @lst = readdir $dir or die "Can't read from /proc\n";
-my %map;
+my %relations;
+my %stats;
 for (@lst) {
 	next unless /^\d+$/;
-	push @{$map{get_ppid("/proc/$_/status") + 0}}, $_ + 0;
+	my ($ppid, $stat) = get_stat($_);
+	$stats{$_} = $stat;
+	push @{$relations{$ppid + 0}}, $_ + 0;
 }
 closedir $dir or die "Can't close /proc\n";
 
@@ -63,9 +62,9 @@ GetOptions(
 
 $fmt .= "p";
 if ($all) {
-	traverse(1, 0, \%map, $fmt);
+	traverse(1, 0, \%relations, \%stats, $fmt);
 } elsif ($pid) {
-	traverse($pid, 0, \%map, $fmt);
+	traverse($pid, 0, \%relations, \%stats, $fmt);
 } else {
 	die "Usage: $0 --pid PID --format nug\nor\n$0 --all\n";
 }
